@@ -1,0 +1,8 @@
+# Don't upload the virtual environment (anyone can recreate it)
+.venv/
+
+# Don't upload data files (too big for GitHub, people can download them from UCI)
+data/
+
+# Python cache files
+__pycache__/
