@@ -68,6 +68,43 @@ before = len(df)
 df = df.drop_duplicates()
 print("F. Removed duplicates:", before - len(df))
 
+# Step G: remove purchases that were later cancelled
+# A cancellation cancels an earlier purchase of the SAME product, by the
+# SAME customer, for the SAME quantity. If we keep that purchase, it looks
+# like the shop earned money it actually gave back.
+before = len(df)
+
+# Give each purchase line an ID so we know exactly which ones to remove
+df["row_id"] = range(len(df))
+
+# Make the cancelled quantity positive so it lines up with the purchase
+cancels = cancellations.copy()
+cancels["cancel_id"] = range(len(cancels))
+cancels["Quantity"] = -cancels["Quantity"]
+cancels = cancels.rename(columns={"InvoiceDate": "CancelDate"})
+
+# Find every purchase that matches a cancellation
+matches = df.merge(
+    cancels[["Customer ID", "StockCode", "Quantity", "CancelDate", "cancel_id"]],
+    on=["Customer ID", "StockCode", "Quantity"]
+)
+
+# The purchase must have happened BEFORE the cancellation
+matches = matches[matches["InvoiceDate"] <= matches["CancelDate"]]
+
+# If a cancellation matches several purchases, take the most recent one
+matches = matches.sort_values("InvoiceDate")
+matches = matches.drop_duplicates(subset="cancel_id", keep="last")
+
+# Remove the matched purchases (each one only once)
+remove_ids = matches["row_id"].unique()
+removed = df[df["row_id"].isin(remove_ids)]
+print("   Revenue removed (GBP):", round((removed["Quantity"] * removed["Price"]).sum(), 2))
+
+df = df[~df["row_id"].isin(remove_ids)]
+df = df.drop(columns="row_id")
+print("G. Removed purchases that were later cancelled:", before - len(df))
+
 
 # ---- 4. Small tidy ups ----
 # Customer ID loads as a decimal (13085.0), make it a whole number
