@@ -2,9 +2,9 @@
 
 Which customers are likely to stop buying, how much revenue is at risk, and what should the business do about it?
 
-An end-to-end analysis of 1M+ transactions from a UK online retailer, from raw data to a churn risk model and a Power BI dashboard a retention team could work from.
+An end-to-end analysis of 1M+ transactions from a UK online retailer, from raw data to a churn risk model, a Power BI dashboard a retention team could work from, and an AI assistant that answers business questions in plain English.
 
-**Tools:** SQL (DuckDB) · Python (pandas, scikit-learn) · Power BI · Git
+**Tools:** SQL (DuckDB) · Python (pandas, scikit-learn) · Power BI · Local LLM (Ollama, Qwen 2.5 Coder) · Git
 
 ---
 
@@ -14,6 +14,7 @@ An end-to-end analysis of 1M+ transactions from a UK online retailer, from raw d
 - **4,261 active customers scored** for churn risk and given a suggested action (win-back, second order offer, cross-sell)
 - **58% of revenue at risk sits with customers who ordered in the last 90 days**, so retention should start early, not after customers go quiet
 - **Found £601k (3.5%) of revenue from orders that were later cancelled**, which was inflating the value of a few customers. Fixed before modelling.
+- **AI analyst assistant** that answers business questions by writing and running its own SQL, tested on 30 questions: **30/30 correct** after one prompt fix
 
 ---
 
@@ -109,6 +110,27 @@ The model learned from the June 2011 snapshot, where the outcome is known, then 
 | Medium (30 to 60%) | 1,392 | £804k | £335k |
 | Low (under 30%) | 2,252 | £7.03m | £381k |
 
+### 6. AI analyst assistant (Python + local LLM)
+
+Ask a question in plain English, like *"How much revenue is at risk in Ireland?"*, and the assistant:
+1. Writes a DuckDB SQL query using a hand-written description of the table
+2. Checks the query is read-only (blocks anything that could change data)
+3. Runs it, and if the SQL fails, sends the error back so the model can fix it once
+4. Explains the result in one or two sentences, using only the numbers returned
+
+It runs entirely on a laptop with Ollama and Qwen 2.5 Coder (7B), so no data leaves the machine.
+
+**Testing:** 30 business questions with known correct answers (totals, filters, group by, rankings). An answer counts as correct if every value in the correct result appears in the assistant's result (whole numbers must match exactly, other numbers within 1%).
+
+| Run | Score | What changed |
+|---|---|---|
+| 1 | 29/30 | Failed on average churn probability: rounded to 1 decimal place |
+| 2 | 30/30 | Added a rounding rule for probabilities, set temperature to 0 for repeatable answers |
+
+The one failure came from the prompt, not the model: the rules covered rounding for money and percentages, but not probabilities. Small details in the table description also mattered, for example telling the model that Ireland is stored as 'EIRE'.
+
+Limitation: the questions were written for this one table, so this shows the assistant handles typical business questions reliably, not that it can answer anything.
+
 ---
 
 ## Key findings
@@ -150,6 +172,9 @@ src/
   run_sql.py               helper to run the .sql files
   04_train_model.py        train and compare churn models
   06_score_customers.py    score current customers, revenue at risk, actions
+  07_test_model.py         first test connecting Python to the local model
+  ai_assistant.py          the AI analyst assistant (chat in the terminal)
+  09_evaluate_assistant.py 30-question accuracy test
 sql/
   01_first_look.sql        orders view, monthly revenue, top countries
   02_churn.sql             churn definition
@@ -183,3 +208,9 @@ python src/04_train_model.py
 python src/06_score_customers.py
 ```
 4. Open `dashboard/customer_retention.pbix` in Power BI Desktop and click Refresh.
+5. AI assistant: install [Ollama](https://ollama.com), then:
+```
+ollama pull qwen2.5-coder:7b
+python src/ai_assistant.py
+python src/09_evaluate_assistant.py
+```
